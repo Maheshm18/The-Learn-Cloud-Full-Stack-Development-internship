@@ -1,0 +1,200 @@
+1. Setuping Project
+
+# Create a new directory for your project
+mkdir mern-todo-dashboard
+cd mern-todo-dashboard
+
+# Initialize a new Node.js project
+npm init -y
+
+# Install backend dependencies
+npm install express mongoose cors
+
+# Create a server.js file for your Express server
+touch server.js
+
+# Install frontend dependencies
+npx create-react-app client
+cd client
+npm install axios react-beautiful-dnd tailwindcss
+
+2. Backend Setup (Express, MongoDB)
+
+In the 'server.js' file:
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+
+mongoose.connect('mongodb://localhost:27017/todos', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+const todoSchema = new mongoose.Schema({
+  title: String,
+  link: String,
+  position: Number,
+  checked: Boolean,
+});
+
+const Todo = mongoose.model('Todo', todoSchema);
+
+app.get('/todos', async (req, res) => {
+  const todos = await Todo.find().sort('position');
+  res.json(todos);
+});
+
+app.post('/todos', async (req, res) => {
+  const { title, link } = req.body;
+  const position = (await Todo.find().sort('position').limit(1))[0]?.position + 1 || 0;
+
+  const todo = new Todo({ title, link, position, checked: false });
+  await todo.save();
+
+  res.json(todo);
+});
+
+app.put('/todos/:id', async (req, res) => {
+  const todo = await Todo.findByIdAndUpdate(
+    req.params.id,
+    { checked: req.body.checked },
+    { new: true }
+  );
+  res.json(todo);
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+3. Frontend Setup (React, Axios, React Beautiful DND, Tailwind CSS)
+
+In the 'client/src/App.js' file:
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import './App.css'; // Import Tailwind CSS styles
+
+function App() {
+  const [todos, setTodos] = useState([]);
+  const [newTodo, setNewTodo] = useState({ title: '', link: '' });
+
+  useEffect(() => {
+    axios.get('http://localhost:5000/todos').then((response) => {
+      setTodos(response.data);
+    });
+  }, []);
+
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+
+    const updatedTodos = [...todos];
+    const [reorderedItem] = updatedTodos.splice(result.source.index, 1);
+    updatedTodos.splice(result.destination.index, 0, reorderedItem);
+
+    setTodos(updatedTodos);
+
+    await axios.put(`http://localhost:5000/todos/${reorderedItem._id}`, {
+      position: result.destination.index,
+    });
+  };
+
+  const addTodo = async () => {
+    const response = await axios.post('http://localhost:5000/todos', newTodo);
+    setTodos([...todos, response.data]);
+    setNewTodo({ title: '', link: '' });
+  };
+
+  const toggleChecked = async (id, checked) => {
+    await axios.put(`http://localhost:5000/todos/${id}`, { checked });
+    const updatedTodos = todos.map((todo) =>
+      todo._id === id ? { ...todo, checked } : todo
+    );
+    setTodos(updatedTodos);
+  };
+
+  return (
+    <div className="container mx-auto mt-8">
+      <h1 className="text-3xl font-bold mb-4">Todo Dashboard</h1>
+      <div className="flex space-x-2 mb-4">
+        <input
+          type="text"
+          placeholder="Title"
+          value={newTodo.title}
+          onChange={(e) => setNewTodo({ ...newTodo, title: e.target.value })}
+          className="border p-2 flex-1"
+        />
+        <input
+          type="text"
+          placeholder="Link"
+          value={newTodo.link}
+          onChange={(e) => setNewTodo({ ...newTodo, link: e.target.value })}
+          className="border p-2 flex-1"
+        />
+        <button onClick={addTodo} className="bg-blue-500 text-white p-2">
+          Add Todo
+        </button>
+      </div>
+
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="todos">
+          {(provided) => (
+            <ul {...provided.droppableProps} ref={provided.innerRef} className="list-none p-0">
+              {todos.map((todo, index) => (
+                <Draggable key={todo._id} draggableId={todo._id} index={index}>
+                  {(provided) => (
+                    <li
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      className="flex items-center space-x-2 bg-gray-100 p-2 mb-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={todo.checked}
+                        onChange={(e) => toggleChecked(todo._id, e.target.checked)}
+                        className="form-checkbox h-5 w-5 text-blue-500"
+                      />
+                      <span className={todo.checked ? 'line-through' : ''}>
+                        {todo.title} - {todo.link}
+                      </span>
+                    </li>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </ul>
+          )}
+        </Droppable>
+      </DragDropContext>
+    </div>
+  );
+}
+
+export default App;
+
+4. Styling with Tailwind CSS
+
+Create a 'client/src/App.css' file and add the following:
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+5. Running the Application
+
+In separate terminal windows, run the backend server and the React app:
+
+# In the root directory
+node server.js
+
+# In the client directory
+npm start
